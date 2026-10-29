@@ -11,7 +11,7 @@ import logging
 import time
 from typing import Any, Optional
 
-from .helpers import ASTRA_EFFORTS, base_url_host_matches, clamp_effort, get_json, is_astra_model
+from .helpers import ASTRA_EFFORTS, base_url_host_matches, clamp_effort, get_json, is_astra_model, is_ghe_copilot_api_host
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,21 @@ MODELS_DEV_ID = "github-copilot"
 
 COPILOT_BASE_URL = "https://api.githubcopilot.com"
 COPILOT_MODELS_URL = f"{COPILOT_BASE_URL}/models"
+
+
+def copilot_api_base_url() -> str:
+    """The account's Copilot API host: ``COPILOT_API_BASE_URL`` when it names a GHE.com tenant
+    (copilot-api.<tenant>.ghe.com) or a githubcopilot.com host, else the public default."""
+    from agent.secret_scope import get_secret
+
+    configured = (get_secret("COPILOT_API_BASE_URL") or "").strip().rstrip("/")
+    if configured and (is_ghe_copilot_api_host(configured) or base_url_host_matches(configured, "githubcopilot.com")):
+        return configured
+    return COPILOT_BASE_URL
+
+
+def copilot_models_url() -> str:
+    return f"{copilot_api_base_url()}/models"
 # Hosts (and subdomains) whose ``/models`` probe is answered from the Copilot catalog.
 _CATALOG_HOSTS = HOSTNAMES + METADATA_HOSTNAMES
 REASONING_EFFORTS_GPT5 = ["minimal", "low", "medium", "high"]
@@ -185,7 +200,7 @@ def fetch_github_model_catalog(
 
     for headers in attempts:
         try:
-            items = _payload_items(get_json(COPILOT_MODELS_URL, timeout=timeout, headers=headers))
+            items = _payload_items(get_json(copilot_models_url(), timeout=timeout, headers=headers))
         except Exception:
             continue
         models = _copilot_text_models(items)
@@ -227,7 +242,8 @@ def copilot_picker_catalog(force_refresh: bool = False) -> Optional[list[str]]:
 def _is_github_models_base_url(base_url: Optional[str]) -> bool:
     # Host match (never a URL prefix): the plan hosts api.<plan>.githubcopilot.com share the account's
     # catalog, and ``https://api.githubcopilot.com.example`` is not GitHub.
-    return any(base_url_host_matches(str(base_url or "").strip(), host) for host in _CATALOG_HOSTS)
+    url = str(base_url or "").strip()
+    return any(base_url_host_matches(url, host) for host in _CATALOG_HOSTS) or is_ghe_copilot_api_host(url)
 
 
 # ─── context windows ───
@@ -383,4 +399,5 @@ class CopilotCatalogMixin:
     ) -> tuple[list[str] | None, str, str] | None:
         if not _is_github_models_base_url(base_url):
             return None
-        return _fetch_github_models(api_key=api_key, timeout=timeout), COPILOT_MODELS_URL, COPILOT_BASE_URL
+        base = copilot_api_base_url()
+        return _fetch_github_models(api_key=api_key, timeout=timeout), f"{base}/models", base

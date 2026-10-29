@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .helpers import base_url_host_matches
+from .helpers import base_url_host_matches, is_ghe_copilot_api_host
 
 _COPILOT_HOST = "githubcopilot.com"  # api.githubcopilot.com plus the api.<plan>.githubcopilot.com variants
 
@@ -31,7 +31,8 @@ RESPONSES_PROFILE_FIELDS: dict[str, Any] = {
 
 
 def _is_copilot_host(base_url: str) -> bool:
-    return base_url_host_matches(str(base_url or ""), _COPILOT_HOST)
+    url = str(base_url or "")
+    return base_url_host_matches(url, _COPILOT_HOST) or is_ghe_copilot_api_host(url)
 
 
 class CopilotResponsesMixin:

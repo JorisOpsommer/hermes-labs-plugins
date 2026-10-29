@@ -175,6 +175,21 @@ _EXCHANGE_FAILURE_TTL_PERMANENT_SECONDS = 1800.0   # 401/403/404: won't heal
 _EXCHANGE_PERMANENT_HTTP_STATUSES = frozenset({401, 403, 404})
 
 
+def _token_exchange_url() -> str:
+    """Exchange URL for public or GHE.com data-residency tenants (copilot-api.<t> -> api.<t>): a
+    ``*.ghe.com`` token 401s on api.github.com. ``COPILOT_TOKEN_EXCHANGE_URL`` overrides."""
+    from .helpers import base_url_hostname, ghe_api_host
+
+    explicit = (get_secret("COPILOT_TOKEN_EXCHANGE_URL") or "").strip().rstrip("/")
+    if explicit:
+        return explicit
+    configured = (get_secret("COPILOT_API_BASE_URL") or "").strip()
+    host = ghe_api_host(configured)
+    if not host and (name := base_url_hostname(configured)).startswith("api.") and name.endswith(".ghe.com"):
+        host = name
+    return f"https://{host}/copilot_internal/v2/token" if host else _TOKEN_EXCHANGE_URL
+
+
 def _token_fingerprint(raw_token: str) -> str:
     """Short fingerprint of a raw token for cache keying (avoids storing full token)."""
     return hashlib.sha256(raw_token.encode()).hexdigest()[:16]
@@ -378,7 +393,7 @@ def _exchange_copilot_token_locked(
         raise ValueError("Copilot token exchange recently failed; skipping re-attempt "
                          f"for another {int(_fail_until - time.time())}s")
     req = urllib.request.Request(
-        _TOKEN_EXCHANGE_URL, method="GET",
+        _token_exchange_url(), method="GET",
         headers={"Authorization": f"token {raw_token}", "User-Agent": _EXCHANGE_USER_AGENT,
                  "Accept": "application/json", "Editor-Version": _EDITOR_VERSION})
     data = _fetch_exchange_with_retry(req, timeout, fp)

@@ -33,6 +33,21 @@ def base_url_host_matches(base_url: str, domain: str) -> bool:
     return bool(hostname and domain) and (hostname == domain or hostname.endswith("." + domain))
 
 
+def is_ghe_copilot_api_host(base_url: str) -> bool:
+    """True for a GHE.com data-residency Copilot API host, ``copilot-api.<tenant>.ghe.com`` (the exchange's
+    ``endpoints.api`` for those tenants). Exact hostname shape only: a path or lookalike domain never matches."""
+    hostname = base_url_hostname(base_url)
+    tenant = hostname[len("copilot-api."):-len(".ghe.com")] if hostname.endswith(".ghe.com") else ""
+    return hostname.startswith("copilot-api.") and bool(tenant) and "." not in tenant
+
+
+def ghe_api_host(base_url: str) -> str:
+    """``api.<tenant>.ghe.com`` (the tenant's REST host) for a GHE Copilot API base URL, else ``""``."""
+    if not is_ghe_copilot_api_host(base_url):
+        return ""
+    return "api." + base_url_hostname(base_url)[len("copilot-api."):]
+
+
 # ─── reasoning-effort ladder (core ``agent.reasoning_effort``) ───
 
 EFFORT_LADDER: tuple[str, ...] = ("none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra")

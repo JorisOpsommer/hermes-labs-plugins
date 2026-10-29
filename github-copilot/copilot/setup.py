@@ -60,10 +60,10 @@ def copilot_api_key() -> tuple[str, str]:
 def _raw_model_ids(api_key: str) -> list:
     """Every id ``/models`` lists for this token (no chat filtering): the last resort when the
     filtered catalog came back empty."""
-    from .catalog import COPILOT_MODELS_URL, _payload_items
+    from .catalog import _payload_items, copilot_default_headers, copilot_models_url
+    headers = {**copilot_default_headers(), **({"Authorization": f"Bearer {api_key}"} if api_key else {})}
     try:
-        items = _payload_items(get_json(COPILOT_MODELS_URL, timeout=5.0,
-                                        headers={"Authorization": f"Bearer {api_key}"} if api_key else {}))
+        items = _payload_items(get_json(copilot_models_url(), timeout=5.0, headers=headers))
     except Exception:  # the picker falls back to the curated list
         return []
     return [str(item.get("id")) for item in items if item.get("id")]

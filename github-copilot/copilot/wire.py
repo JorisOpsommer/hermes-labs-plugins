@@ -10,9 +10,10 @@ from __future__ import annotations
 import re
 from typing import Any, Optional
 
-from .helpers import base_url_host_matches, base_url_hostname
+from .helpers import base_url_host_matches, base_url_hostname, is_ghe_copilot_api_host
 
-# Copilot's own API host family (individual, business and enterprise subdomains).
+# Copilot's own API host family (individual, business and enterprise subdomains). GHE.com data-residency
+# tenants are served from copilot-api.<tenant>.ghe.com instead and need the same editor headers.
 _COPILOT_HOST = "githubcopilot.com"
 # Hosts whose first call of a user turn carries ``x-initiator: user`` (Hermes core's set). Every other host,
 # including the plan hosts the token exchange hands out (api.individual./api.business./api.enterprise.),
@@ -21,7 +22,8 @@ _INITIATOR_HOSTS = ("api.githubcopilot.com", "models.github.ai")
 
 
 def is_copilot_host(base_url: str) -> bool:
-    return base_url_host_matches(str(base_url or ""), _COPILOT_HOST)
+    url = str(base_url or "")
+    return base_url_host_matches(url, _COPILOT_HOST) or is_ghe_copilot_api_host(url)
 
 
 def requires_responses_api(model_id: str) -> bool:
@@ -74,4 +76,6 @@ class CopilotWireMixin:
 
     def max_tokens_param(self, *, base_url: str, model: str = "") -> str | None:
         host = base_url_hostname(str(base_url or "")) or ""
-        return "max_completion_tokens" if host.endswith("." + _COPILOT_HOST) else None
+        if host.endswith("." + _COPILOT_HOST) or is_ghe_copilot_api_host(host):
+            return "max_completion_tokens"
+        return None
